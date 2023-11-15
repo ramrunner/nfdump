@@ -87,15 +87,47 @@
 
 static uint8_t m_key[16];  // 128 bit secret key
 static uint8_t m_pad[16];  // 128 bit secret pad
+static int m_ranges[4];    // v4 and v6 bit ranges to operate on
 
 // Init
-void PAnonymizer_Init(uint8_t *key) {
+void PAnonymizer_Init(uint8_t *key, int ranges[4]) {
     // initialize the 128-bit secret key.
     memcpy(m_key, key, 16);
     // initialize the Rijndael cipher.
     Rijndael_init(ECB, Encrypt, key, Key16Bytes, NULL);
     // initialize the 128-bit secret pad. The pad is encrypted before being used for padding.
     Rijndael_blockEncrypt(key + 16, 128, m_pad);
+    // copy in the bit ranges requested by the user.
+    memcpy(m_ranges, ranges, 4*sizeof(int));
+}
+
+int ParseBitRanges(char *s, int *b) {
+    char **ap, *argv[5] = { NULL };
+    int rnum = 0, pos = 0, *bs = b;
+    for (ap = argv; ap < &argv[4] && (*ap = strsep(&s, ",")) != NULL;) {
+        if (**ap != '\0')
+               ap++;
+    }
+    *ap = NULL;
+    if (ap - argv != 4) { // read less than 4 fields
+       fprintf(stderr, "*** ParseBitRanges error: less than 4 fields specified\n");
+       return 0;
+    }
+    for (ap = argv; ap < &argv[4]; ap++) {
+        rnum = atoi(*ap);
+        if (strlen(*ap) > 3 || rnum < 1 || (pos < 2 && rnum > 32) || (pos > 1 && rnum >128)) {
+           fprintf(stderr, "*** ParseBitRanges error: ranges should be in [1,32] for v4 and in [1,128] for v6\n");
+           return 0;
+        }
+        *b = rnum;
+	b++;
+        pos++;
+    }
+    if (bs[1] <= bs[0] || bs[3] <= bs[2]) {
+       fprintf(stderr, "*** ParseBitRanges error, each range should be in increasing order\n");
+       return 0;
+    }
+    return 1;
 }
 
 int ParseCryptoPAnKey(char *s, char *key) {
@@ -142,15 +174,15 @@ uint32_t anonymize(const uint32_t orig_addr) {
 
     uint32_t result = 0;
     uint32_t first4bytes_pad, first4bytes_input;
-    int pos;
+    int pos, a = m_ranges[0] - 1, b = m_ranges[1] - 1;
 
     memcpy(rin_input, m_pad, 16);
     first4bytes_pad = (((uint32_t)m_pad[0]) << 24) + (((uint32_t)m_pad[1]) << 16) + (((uint32_t)m_pad[2]) << 8) + (uint32_t)m_pad[3];
 
-    // For each prefixes with length from 0 to 31, generate a bit using the Rijndael cipher,
+    // For each prefixes with length from a to b (defaults to 0, 31), generate a bit using the Rijndael cipher,
     // which is used as a pseudorandom function here. The bits generated in every rounds
     // are combineed into a pseudorandom one-time-pad.
-    for (pos = 0; pos <= 31; pos++) {
+    for (pos = a; pos <= b; pos++) {
         // Padding: The most significant pos bits are taken from orig_addr. The other 128-pos
         // bits are taken from m_pad. The variables first4bytes_pad and first4bytes_input are used
         // to handle the annoying byte order problem.
@@ -183,7 +215,7 @@ void anonymize_v6(const uint64_t orig_addr[2], uint64_t *anon_addr) {
     uint8_t rin_output[16], *orig_bytes, *result;
     uint8_t rin_input[16];
 
-    int pos, i, bit_num, left_byte;
+    int pos, i, bit_num, left_byte, a = m_ranges[2] - 1, b = m_ranges[3] - 1;
 
     anon_addr[0] = anon_addr[1] = 0;
     result = (uint8_t *)anon_addr;
@@ -192,7 +224,7 @@ void anonymize_v6(const uint64_t orig_addr[2], uint64_t *anon_addr) {
     // For each prefixes with length from 0 to 127, generate a bit using the Rijndael cipher,
     // which is used as a pseudorandom function here. The bits generated in every rounds
     // are combineed into a pseudorandom one-time-pad.
-    for (pos = 0; pos <= 127; pos++) {
+    for (pos = a; pos <= b; pos++) {
         bit_num = pos & 0x7;
         left_byte = (pos >> 3);
 

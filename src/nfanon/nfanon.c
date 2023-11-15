@@ -75,7 +75,8 @@ static void usage(char *name) {
         "-K <key>\tAnonymize IP addresses using CryptoPAn with key <key>.\n"
         "-q\t\tDo not print progress spinnen and filenames.\n"
         "-r <path>\tread input from single file or all files in directory.\n"
-        "-w <file>\tName of output file. Defaults to input file.\n",
+        "-w <file>\tName of output file. Defaults to input file.\n"
+        "-R a,b,c,d\tUse [a,b] and [c,d] as the respective v4 and v6 anonymization bitranges. Defaults to 1,32,1,128\n",
         name);
 } /* usage */
 
@@ -397,10 +398,11 @@ int main(int argc, char **argv) {
     char *wfile = NULL;
     char CryptoPAnKey[32] = {0};
     flist_t flist = {0};
+    int ranges[4] = {1, 32, 1, 128};
 
     int verbose = 1;
     int c;
-    while ((c = getopt(argc, argv, "hK:L:qr:w:")) != EOF) {
+    while ((c = getopt(argc, argv, "hK:L:qr:w:R:")) != EOF) {
         switch (c) {
             case 'h':
                 usage(argv[0]);
@@ -413,7 +415,6 @@ int main(int argc, char **argv) {
                     LogError("Invalid key '%s' for CryptoPAn", optarg);
                     exit(255);
                 }
-                PAnonymizer_Init((uint8_t *)CryptoPAnKey);
                 break;
             case 'L':
                 if (!InitLog(0, "argv[0]", optarg, 0)) exit(255);
@@ -435,12 +436,20 @@ int main(int argc, char **argv) {
             case 'w':
                 wfile = optarg;
                 break;
+            case 'R':
+                if (!ParseBitRanges(optarg, ranges)) {
+                    LogError("Invalid anonymization bit ranges");
+                    exit(255);
+                }
+                printf("ranges given were [%d,%d] and [%d,%d]\n", ranges[0], ranges[1], ranges[2], ranges[3]);
+                break;
             default:
                 usage(argv[0]);
                 exit(0);
         }
     }
 
+    PAnonymizer_Init((uint8_t *)CryptoPAnKey, ranges);
     if (CryptoPAnKey[0] == '\0') {
         LogError("Expect -K <key>");
         usage(argv[0]);
