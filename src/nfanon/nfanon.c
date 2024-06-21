@@ -54,6 +54,7 @@
 #include "nfxV3.h"
 #include "panonymizer.h"
 #include "util.h"
+#include "cryptopANT.h"
 
 /* Function Prototypes */
 static void usage(char *name);
@@ -64,6 +65,9 @@ static inline void WriteAnonRecord(nffile_t *wfile, recordHeaderV3_t *v3Record);
 
 static void process_data(void *wfile, int verbose);
 
+int deanon; /* global to track if we are operating in deanonymization mode */
+int pass4, pass6; /* globals to keep track of how many bits to keep in unchanged (defaults 0, 0) */
+
 /* Functions */
 
 #include "nffile_inline.c"
@@ -72,11 +76,12 @@ static void usage(char *name) {
     printf(
         "usage %s [options] \n"
         "-h\t\tthis text you see right here.\n"
-        "-K <key>\tAnonymize IP addresses using CryptoPAn with key <key>.\n"
+        "-K <keyfile>\tAnonymize IP addresses using CryptopANT with keyfile <keyfile>.\n"
         "-q\t\tDo not print progress spinnen and filenames.\n"
         "-r <path>\tread input from single file or all files in directory.\n"
         "-w <file>\tName of output file. Defaults to input file.\n"
-        "-R a,b,c,d\tUse [a,b] and [c,d] as the respective v4 and v6 anonymization bitranges. Defaults to 1,32,1,128\n",
+        "-R bits4,bits6\tUse bits4 and bits6 as the respective v4 and v6 bitranges that will stay unchanged. Defaults to 0,0\n",
+        "-D\t\tDeanonymize u. (requires -K)\n",
         name);
 } /* usage */
 
@@ -107,18 +112,12 @@ static inline void AnonRecord(recordHeaderV3_t *v3Record) {
                 break;
             case EXipv4FlowID: {
                 EXipv4Flow_t *ipv4Flow = (EXipv4Flow_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                ipv4Flow->srcAddr = anonymize(ipv4Flow->srcAddr);
-                ipv4Flow->dstAddr = anonymize(ipv4Flow->dstAddr);
+		(deanon)?unscramble_ip4(ipv4Flow->srcAddr, pass4):scramble_ip4(ipv4Flow->srcAddr, pass4);
+		(deanon)?unscramble_ip4(ipv4Flow->dstAddr, pass4):scramble_ip4(ipv4Flow->dstAddr, pass4);
             } break;
             case EXipv6FlowID: {
                 EXipv6Flow_t *ipv6Flow = (EXipv6Flow_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                anonymize_v6(ipv6Flow->srcAddr, anon_ip);
-                ipv6Flow->srcAddr[0] = anon_ip[0];
-                ipv6Flow->srcAddr[1] = anon_ip[1];
-
-                anonymize_v6(ipv6Flow->srcAddr, anon_ip);
-                ipv6Flow->dstAddr[0] = anon_ip[0];
-                ipv6Flow->dstAddr[1] = anon_ip[1];
+		(deanon)?unscramble_ip6(ipv6Flow->srcAddr, pass6):scramble_ip6(ipv6Flow->srcAddr, pass6);
             } break;
             case EXflowMiscID:
                 break;
@@ -133,33 +132,27 @@ static inline void AnonRecord(recordHeaderV3_t *v3Record) {
             } break;
             case EXbgpNextHopV4ID: {
                 EXbgpNextHopV4_t *bgpNextHopV4 = (EXbgpNextHopV4_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                bgpNextHopV4->ip = anonymize(bgpNextHopV4->ip);
+		(deanon)?unscramble_ip4(bgpNextHopV4->ip, pass4):scramble_ip4(bgpNextHopV4->ip, pass4);
             } break;
             case EXbgpNextHopV6ID: {
                 EXbgpNextHopV6_t *bgpNextHopV6 = (EXbgpNextHopV6_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                anonymize_v6(bgpNextHopV6->ip, anon_ip);
-                bgpNextHopV6->ip[0] = anon_ip[0];
-                bgpNextHopV6->ip[1] = anon_ip[1];
+		(deanon)?unscramble_ip6(bgpNextHopV6->ip, pass6):scramble_ip6(bgpNextHopV6->ip, pass6);
             } break;
             case EXipNextHopV4ID: {
                 EXipNextHopV4_t *ipNextHopV4 = (EXipNextHopV4_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                ipNextHopV4->ip = anonymize(ipNextHopV4->ip);
+		(deanon)?unscramble_ip4(ipNextHopV4->ip, pass4):scramble_ip4(ipNextHopV4->ip, pass4);
             } break;
             case EXipNextHopV6ID: {
                 EXipNextHopV6_t *ipNextHopV6 = (EXipNextHopV6_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                anonymize_v6(ipNextHopV6->ip, anon_ip);
-                ipNextHopV6->ip[0] = anon_ip[0];
-                ipNextHopV6->ip[1] = anon_ip[1];
+		(deanon)?unscramble_ip6(ipNextHopV6->ip, pass6):scramble_ip6(ipNextHopV6->ip, pass6);
             } break;
             case EXipReceivedV4ID: {
                 EXipNextHopV4_t *ipNextHopV4 = (EXipNextHopV4_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                ipNextHopV4->ip = anonymize(ipNextHopV4->ip);
+		(deanon)?unscramble_ip4(ipNextHopV4->ip, pass4):scramble_ip4(ipNextHopV4->ip, pass4);
             } break;
             case EXipReceivedV6ID: {
                 EXipReceivedV6_t *ipReceivedV6 = (EXipReceivedV6_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                anonymize_v6(ipReceivedV6->ip, anon_ip);
-                ipReceivedV6->ip[0] = anon_ip[0];
-                ipReceivedV6->ip[1] = anon_ip[1];
+		(deanon)?unscramble_ip6(ipReceivedV6->ip, pass6):scramble_ip6(ipReceivedV6->ip, pass6);
             } break;
             case EXmplsLabelID:
                 break;
@@ -177,18 +170,13 @@ static inline void AnonRecord(recordHeaderV3_t *v3Record) {
                 break;
             case EXnselXlateIPv4ID: {
                 EXnselXlateIPv4_t *nselXlateIPv4 = (EXnselXlateIPv4_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                nselXlateIPv4->xlateSrcAddr = anonymize(nselXlateIPv4->xlateSrcAddr);
-                nselXlateIPv4->xlateDstAddr = anonymize(nselXlateIPv4->xlateDstAddr);
+		(deanon)?unscramble_ip4(nselXlateIPv4->xlateSrcAddr, pass4):scramble_ip4(nselXlateIPv4->xlateSrcAddr, pass4);
+		(deanon)?unscramble_ip4(nselXlateIPv4->xlateDstAddr, pass4):scramble_ip4(nselXlateIPv4->xlateDstAddr, pass4);
             } break;
             case EXnselXlateIPv6ID: {
                 EXnselXlateIPv6_t *nselXlateIPv6 = (EXnselXlateIPv6_t *)((void *)elementHeader + sizeof(elementHeader_t));
-                anonymize_v6(nselXlateIPv6->xlateSrcAddr, anon_ip);
-                nselXlateIPv6->xlateSrcAddr[0] = anon_ip[0];
-                nselXlateIPv6->xlateSrcAddr[1] = anon_ip[1];
-
-                anonymize_v6(nselXlateIPv6->xlateDstAddr, anon_ip);
-                nselXlateIPv6->xlateDstAddr[0] = anon_ip[0];
-                nselXlateIPv6->xlateDstAddr[1] = anon_ip[1];
+		(deanon)?unscramble_ip6(nselXlateIPv6->xlateSrcAddr, pass6):scramble_ip6(nselXlateIPv6->xlateSrcAddr, pass6);
+		(deanon)?unscramble_ip6(nselXlateIPv6->xlateDstAddr, pass6):scramble_ip6(nselXlateIPv6->xlateDstAddr, pass6);
             } break;
             case EXnselXlatePortID:
                 break;
@@ -402,7 +390,12 @@ int main(int argc, char **argv) {
 
     int verbose = 1;
     int c;
-    while ((c = getopt(argc, argv, "hK:L:qr:w:R:")) != EOF) {
+
+    pass4 = 0;
+    pass6 = 0;
+    scramble_crypt_t key_crypto = SCRAMBLE_BLOWFISH;
+
+    while ((c = getopt(argc, argv, "hDK:L:qr:w:R:")) != EOF) {
         switch (c) {
             case 'h':
                 usage(argv[0]);
@@ -410,11 +403,8 @@ int main(int argc, char **argv) {
                 break;
                 break;
             case 'K':
-                CheckArgLen(optarg, 66);
-                if (!ParseCryptoPAnKey(optarg, CryptoPAnKey)) {
-                    LogError("Invalid key '%s' for CryptoPAn", optarg);
-                    exit(255);
-                }
+                CheckArgLen(optarg, MAXPATHLEN);
+		scramble_init_from_file(optarg, key_crypto, key_crypto, NULL);
                 break;
             case 'L':
                 if (!InitLog(0, "argv[0]", optarg, 0)) exit(255);
@@ -437,23 +427,13 @@ int main(int argc, char **argv) {
                 wfile = optarg;
                 break;
             case 'R':
-                if (!ParseBitRanges(optarg, ranges)) {
-                    LogError("Invalid anonymization bit ranges");
-                    exit(255);
-                }
-                printf("ranges given were [%d,%d] and [%d,%d]\n", ranges[0], ranges[1], ranges[2], ranges[3]);
                 break;
+	    case 'D':
+		deanon = 1;
             default:
                 usage(argv[0]);
                 exit(0);
         }
-    }
-
-    PAnonymizer_Init((uint8_t *)CryptoPAnKey, ranges);
-    if (CryptoPAnKey[0] == '\0') {
-        LogError("Expect -K <key>");
-        usage(argv[0]);
-        exit(255);
     }
 
     queue_t *fileList = SetupInputFileSequence(&flist);

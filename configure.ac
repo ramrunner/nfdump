@@ -142,6 +142,20 @@ fi
 ,
 )
 
+# ISI CryptopANT support
+AC_ARG_WITH(cryptopantpath,
+[  --with-cryptopantpath=PATH    Expect libcryptopant to be installed in PATH; default /usr/local],
+if test "x$with_cryptopantpath" = "xyes" ; then
+	CPPFLAGS="${CPPFLAGS} -I/usr/local/include"
+	LDFLAGS="${LDFLAGS} -L/usr/local/lib"
+else
+	CPPFLAGS="${CPPFLAGS} -I${with_cryptopantpath}/src"
+	LDFLAGS="${LDFLAGS} -L${with_cryptopantpath}/.libs -lcryptopANT"
+fi
+,
+)
+
+
 #Tidz up? esp not using in source dist flow-tools
 AC_ARG_ENABLE(ftconv,
 [  --enable-ftconv         Build the flow-tools to nfdump converter; default is NO])
