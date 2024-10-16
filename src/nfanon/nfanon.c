@@ -430,6 +430,8 @@ int main(int argc, char **argv) {
                 wfile = optarg;
                 break;
             case 'R':
+		sscanf(optarg, "%d,%d", &pass4, &pass6); 
+		printf("pass4:%d pass6:%d", pass4, pass6);
                 break;
 	    case 'D':
 		deanon = 1;
